@@ -19,11 +19,11 @@ def get_status_board(
     return query(query_func).status_board_v1 or []
 
 
-def get_selected_app_names(
+def get_selected_apps(
     global_selectors: Iterable[str],
     product: StatusBoardProductV1,
-) -> set[str]:
-    selected_app_names: set[str] = set()
+) -> dict[str: set[str]]:
+    selected_app_names: dict[str: set[str]] = dict()
 
     apps: dict[str, Any] = {"apps": []}
     for namespace in product.product_environment.namespaces or []:
@@ -34,6 +34,8 @@ def get_selected_app_names(
         selected_app_names.add(name)
         app = namespace.app.dict(by_alias=True)
         app["name"] = name
+        saasFiles = (saasFile["name"] for saasFile in app["saasFiles"] if "Deployment" in saasFile["managedResourceTypes"])
+        app["saasFiles"] = saasFiles
         apps["apps"].append(app)
 
         for child in namespace.app.children_apps or []:
@@ -41,6 +43,8 @@ def get_selected_app_names(
             if name not in selected_app_names:
                 selected_app_names.add(f"{namespace.app.name}-{child.name}")
                 child_dict = child.dict(by_alias=True)
+                child_saasFiles = (saasFile["name"] for saasFile in child_dict["saasFiles"] if "Deployment" in saasFile["managedResourceTypes"])
+                child_dict["saasFiles"] = child_saasFiles
                 child_dict["name"] = name
                 apps["apps"].append(child_dict)
 

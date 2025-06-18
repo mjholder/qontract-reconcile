@@ -11,9 +11,9 @@ from typing import (
 
 from pydantic import BaseModel
 
-from reconcile.gql_definitions.status_board.status_board import StatusBoardV1
+from reconcile.gql_definitions.status_board import status_board
 from reconcile.typed_queries.status_board import (
-    get_selected_app_names,
+    get_selected_apps,
     get_status_board,
 )
 from reconcile.utils.differ import diff_mappings
@@ -29,6 +29,7 @@ from reconcile.utils.ocm_base_client import (
     OCMBaseClient,
     init_ocm_base_client,
 )
+from reconcile.utils import gql
 from reconcile.utils.runtime.integration import QontractReconcileIntegration
 
 QONTRACT_INTEGRATION = "status-board-exporter"
@@ -134,12 +135,12 @@ class StatusBoardExporterIntegration(QontractReconcileIntegration):
         return QONTRACT_INTEGRATION
 
     @staticmethod
-    def get_product_apps(sb: StatusBoardV1) -> dict[str, set[str]]:
+    def get_product_apps(sb: status_board.StatusBoardV1) -> dict[str, dict[str, set[str]]]:
         global_selectors = (
             sb.global_app_selectors.exclude or [] if sb.global_app_selectors else []
         )
         return {
-            p.product_environment.product.name: get_selected_app_names(
+            p.product_environment.product.name: get_selected_apps(
                 global_selectors, p
             )
             for p in sb.products
@@ -165,11 +166,12 @@ class StatusBoardExporterIntegration(QontractReconcileIntegration):
         desired_product_apps: Mapping[str, set[str]],
         current_products_applications: Iterable[Product],
     ) -> list[StatusBoardHandler]:
-        def create_app(app_name: str, product: Product) -> Application:
+        def create_app(app_name: str, product: Product, metadata: dict[str, Any]) -> Application:
             return Application(
                 name=app_name,
                 fullname=f"{product.name}/{app_name}",
                 product=product,
+                metadata=metadata
             )
 
         return_list: list[StatusBoardHandler] = []
@@ -264,7 +266,12 @@ class StatusBoardExporterIntegration(QontractReconcileIntegration):
 
         for sb in get_status_board():
             ocm_api = init_ocm_base_client(sb.ocm, self.secret_reader)
-            desired_product_apps: dict[str, set[str]] = self.get_product_apps(sb)
+
+            # right now this is {product: [unique apps]}
+            # this needs to be {product: [unique apps: [unique saasFiles]]}
+            # or something. The main thing i'm trying to solve is the apps
+            # with the new saas files for the diff and apply the changes
+            desired_product_apps: dict[str, dict[str, set[str]]] = self.get_product_apps(sb)
 
             current_products_applications = self.get_current_products_applications(
                 ocm_api
