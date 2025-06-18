@@ -28,6 +28,10 @@ query StatusBoard {
         namespaces {
           app {
             name
+            saasFiles {
+              name
+              managedResourceTypes
+            }
             onboardingStatus
             childrenApps {
               name
